@@ -1,157 +1,94 @@
-![fluter_file_picker](https://user-images.githubusercontent.com/27860743/64064695-b88dab00-cbfc-11e9-814f-30921b66035f.png)
+![File Picker](.github/assets/readme_banner.svg)
+
 <p align="center">
- <a href="https://pub.dartlang.org/packages/file_picker">
-    <img alt="File Picker" src="https://img.shields.io/pub/v/file_picker.svg">
+  <a href="https://pub.dev/packages/file_picker">
+    <img alt="pub package" src="https://img.shields.io/pub/v/file_picker.svg">
   </a>
- <a href="https://github.com/Solido/awesome-flutter">
+  <a href="https://github.com/vicajilau/flutter_file_picker/actions/workflows/main.yml">
+    <img alt="CI pipeline status" src="https://github.com/vicajilau/flutter_file_picker/actions/workflows/main.yml/badge.svg">
+  </a>
+  <a href="https://github.com/vicajilau/flutter_file_picker/issues">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/vicajilau/flutter_file_picker">
+  </a>
+  <a href="https://github.com/vicajilau/flutter_file_picker/blob/master/LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/vicajilau/flutter_file_picker">
+  </a>
+  <a href="https://github.com/Solido/awesome-flutter">
     <img alt="Awesome Flutter" src="https://img.shields.io/badge/Awesome-Flutter-blue.svg?longCache=true&style=flat-square">
-  </a>
- <a href="https://codemagic.io/apps/5ce89f4a9b46f5000ca89638/5ce89f4a9b46f5000ca89637/latest_build">
-    <img alt="Build Status" src="https://api.codemagic.io/apps/5ee2d379c2d4737a756cbd00/5ee2d379c2d4737a756cbcff/status_badge.svg">
-  </a>
- <a href="https://www.buymeacoffee.com/gQyz2MR">
-    <img alt="Buy me a coffee" src="https://img.shields.io/badge/Donate-Buy%20Me%20A%20Coffee-yellow.svg">
-  </a>
-  <a href="https://github.com/miguelpruivo/flutter_file_picker/issues"><img src="https://img.shields.io/github/issues/miguelpruivo/flutter_file_picker">
-  </a>
-  <img src="https://img.shields.io/github/license/miguelpruivo/flutter_file_picker">
-  <a href="https://github.com/miguelpruivo/flutter_file_picker/actions/workflows/main.yml">
-    <img alt="CI pipeline status" src="https://github.com/miguelpruivo/flutter_file_picker/actions/workflows/main.yml/badge.svg">
   </a>
 </p>
 
 # File Picker
-A package that allows you to use the native file explorer to pick single or multiple files, with extensions filtering support.
 
-## Currently supported features
-* Uses OS default native pickers
-* Supports multiple platforms (Mobile, Web, Desktop and Flutter GO)
-* Pick files using  **custom format** filtering — you can provide a list of file extensions (pdf, svg, zip, etc.)
-* Pick files from **cloud files** (GDrive, Dropbox, iCloud)
-* Single or multiple file picks
-* Different default type filtering (media, image, video, audio or any)
-* Picking directories
-* Load file data immediately into memory (`Uint8List`) if needed; 
-* Open a save-file / save-as dialog (a dialog that lets the user specify the drive, directory, and name of a file to save)
+A Flutter plugin that lets you use the native file explorer to pick single or multiple files, with extension filtering, directory selection, and save-file dialogs, across Android, iOS, Linux, macOS, Windows, and Web.
 
-If you have any feature that you want to see in this package, please feel free to issue a suggestion. 🎉
+This repository is a [Melos](https://melos.invertase.dev/) workspace hosting `file_picker` as a **federated plugin**: a single cross-platform API package on top of one implementation package per platform, all versioned and published independently.
+
+## Packages
+
+| Package | Pub | Description |
+|---|---|---|
+| [`file_picker`](packages/file_picker) | [![pub](https://img.shields.io/pub/v/file_picker.svg)](https://pub.dev/packages/file_picker) | The main package. Add this to your app, it pulls in the right platform implementation automatically. |
+| [`file_picker_platform_interface`](packages/file_picker_platform_interface) | [![pub](https://img.shields.io/pub/v/file_picker_platform_interface.svg)](https://pub.dev/packages/file_picker_platform_interface) | The shared interface and data contracts (`PlatformFile`, `FileType`, platform option classes) every implementation builds on. |
+| [`file_picker_darwin`](packages/file_picker_darwin) | [![pub](https://img.shields.io/pub/v/file_picker_darwin.svg)](https://pub.dev/packages/file_picker_darwin) | iOS and macOS implementation. |
+| [`android_file_picker`](packages/file_picker_android) | [![pub](https://img.shields.io/pub/v/android_file_picker.svg)](https://pub.dev/packages/android_file_picker) | Android implementation, including Storage Access Framework (SAF) support. |
+| [`file_picker_linux`](packages/file_picker_linux) | [![pub](https://img.shields.io/pub/v/file_picker_linux.svg)](https://pub.dev/packages/file_picker_linux) | Linux implementation, using GTK3 and XDG Desktop Portals. |
+| [`windows_file_picker`](packages/file_picker_windows) | [![pub](https://img.shields.io/pub/v/windows_file_picker.svg)](https://pub.dev/packages/windows_file_picker) | Windows implementation, using the Win32 COM APIs. |
+| [`file_picker_web`](packages/file_picker_web) | [![pub](https://img.shields.io/pub/v/file_picker_web.svg)](https://pub.dev/packages/file_picker_web) | Web implementation, including Wasm compilation support. |
+
+Almost all apps should only ever depend on `file_picker` directly. The platform packages are pulled in transitively and registered automatically by Flutter's plugin system; you only reach for one of them directly if you need a platform-specific API that isn't exposed on the shared facade (for example `FilePickerDarwin.skipEntitlementsChecks()` on macOS).
+
+## Quick start
+
+```yaml
+dependencies:
+  file_picker: ^12.0.0
+```
+
+```dart
+import 'package:file_picker/file_picker.dart';
+
+final file = await FilePicker.pickFile();
+
+if (file != null) {
+  print(file.name);
+  print(await file.length());
+}
+```
+
+See [`packages/file_picker/README.md`](packages/file_picker/README.md) for the full feature list, platform compatibility chart, and more usage examples (multiple files, extension filters, directory picking, save-file dialogs).
 
 ## Documentation
-See the **[File Picker Wiki](https://github.com/miguelpruivo/flutter_file_picker/wiki)** for every detail on about how to install, setup and use it.
 
-### File Picker Wiki
+- [`packages/file_picker/README.md`](packages/file_picker/README.md) for usage and the platform compatibility chart, and each platform package's own README for platform-specific setup (e.g. [`file_picker_darwin`](packages/file_picker_darwin/README.md) for macOS entitlements).
+- [API reference on pub.dev](https://pub.dev/documentation/file_picker/latest/file_picker/FilePicker-class.html).
+- [`packages/file_picker/CHANGELOG.md`](packages/file_picker/CHANGELOG.md) and each platform package's own `CHANGELOG.md` for release notes.
 
-1. [Installation](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/Installation)
-2. [Setup](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/Setup)
-   * [Android](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/Setup#android)
-   * [iOS](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/Setup#ios)
-   * [Web](https://github.com/miguelpruivo/flutter_file_picker/wiki/Setup#--web)
-   * [Desktop (go-flutter)](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/Setup/_edit#desktop-go-flutter)
-3. [API](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/api)
-   * [Filters](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/API#filters)
-   * [Parameters](https://github.com/miguelpruivo/flutter_file_picker/wiki/API#parameters)
-   * [Methods](https://github.com/miguelpruivo/plugins_flutter_file_picker/wiki/API#methods)
-4. [FAQ](https://github.com/miguelpruivo/flutter_file_picker/wiki/FAQ)
-5. [Troubleshooting](https://github.com/miguelpruivo/flutter_file_picker/wiki/Troubleshooting)
+## Contributing
 
-## Usage
-Quick simple usage example:
+Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request, it covers testing requirements, versioning, and changelog conventions for this workspace.
 
-#### Single file
-```dart
-FilePickerResult? result = await FilePicker.platform.pickFiles();
+To work on this repository locally:
 
-if (result != null) {
-  File file = File(result.files.single.path);
-} else {
-  // User canceled the picker
-}
-```
-#### Multiple files
-```dart
-FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true);
-
-if (result != null) {
-  List<File> files = result.paths.map((path) => File(path)).toList();
-} else {
-  // User canceled the picker
-}
-```
-#### Multiple files with extension filter
-```dart
-FilePickerResult? result = await FilePicker.platform.pickFiles(
-  type: FileType.custom,
-  allowedExtensions: ['jpg', 'pdf', 'doc'],
-);
-```
-#### Pick a directory
-```dart
-String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
-
-if (selectedDirectory == null) {
-  // User canceled the picker
-}
-```
-#### Save-file / save-as dialog
-```dart
-String? outputFile = await FilePicker.platform.saveFile(
-  dialogTitle: 'Please select an output file:',
-  fileName: 'output-file.pdf',
-);
-
-if (outputFile == null) {
-  // User canceled the picker
-}
-```
-### Load result and file details
-```dart
-FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-if (result != null) {
-  PlatformFile file = result.files.first;
-
-  print(file.name);
-  print(file.bytes);
-  print(file.size);
-  print(file.extension);
-  print(file.path);
-} else {
-  // User canceled the picker
-}
-```
-#### Pick and upload a file to Firebase Storage with Flutter Web
-```dart
-FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-if (result != null) {
-  Uint8List fileBytes = result.files.first.bytes;
-  String fileName = result.files.first.name;
-  
-  // Upload file
-  await FirebaseStorage.instance.ref('uploads/$fileName').putData(fileBytes);
-}
+```sh
+dart pub global activate melos
+melos bootstrap
+melos run analyze   # flutter analyze across every package
+melos run test       # flutter test across every package
 ```
 
-For full usage details refer to the **[Wiki](https://github.com/miguelpruivo/flutter_file_picker/wiki)** above.
+Each package keeps its own `pubspec.yaml` and `CHANGELOG.md` and is released independently, only the package(s) you actually changed need a version bump.
 
-## Example App
-#### Android
-![Demo](https://github.com/miguelpruivo/flutter_file_picker/blob/master/example/screenshots/example.gif)
-#### iOS
-![DemoMultiFilters](https://github.com/miguelpruivo/flutter_file_picker/blob/master/example/screenshots/example_ios.gif)
-#### MacOS
-![DemoMacOS](https://github.com/miguelpruivo/flutter_file_picker/blob/master/example/screenshots/example_macos.png)
-#### Linux
-![DemoLinux](https://github.com/miguelpruivo/flutter_file_picker/blob/master/example/screenshots/example_linux.png)
-#### Windows
-![DemoWindows](https://github.com/miguelpruivo/flutter_file_picker/blob/master/example/screenshots/example_windows.png)
+## Credits
 
-## Getting Started
+`file_picker` is [Miguel Ruivo](https://github.com/miguelpruivo)'s work.
 
-For help getting started with Flutter, view our online
-[documentation](https://flutter.io/).
+He wrote the first commit on 23 June 2018 and spent the next eight years turning it into the package Flutter reaches for whenever an app needs a file. Six platform implementations, more than a hundred releases, millions of downloads every month, and over a hundred people who sent a patch along the way.
 
-For help on editing plugin code, view the [documentation](https://flutter.io/platform-plugins/#edit-code).
+Maintenance moved to this repository in 2026. The architecture, the API and most of the hard problems were solved long before that, and everything here is built on top of them.
 
+Thank you, Miguel.
 
+## License
 
+MIT, see [`LICENSE`](LICENSE). Every package in this repository is released under the same license.

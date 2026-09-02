@@ -6,7 +6,7 @@ labels: new issue
 
 ---
 
-Before creating an issue, make sure that you are on the latest `file_picker` version and that there aren't already any similar opened inssues. Also, check if it isn't described on the [Wiki](https://github.com/miguelpruivo/flutter_file_picker/wiki), specially on [Troubleshooting](https://github.com/miguelpruivo/flutter_file_picker/wiki/Troubleshooting) page.
+Before creating an issue, make sure that you are on the latest `file_picker` version and that there aren't already any similar [opened issues](https://github.com/vicajilau/flutter_file_picker/issues).
 
 Also, sometimes a simple `flutter clean` and `flutter build` again with latest file_picker version, may end up by fixing cached issues, so I encourage you to first do so.
 
@@ -14,10 +14,11 @@ Also, sometimes a simple `flutter clean` and `flutter build` again with latest f
 A clear and concise description of what the bug is. If the issue happens to be on Android, please make sure that it also happens with a different device/simulator and/or version.
 
 **Platform**
-- [] Android
-- [] iOS
-- [] Web
-- [] Desktop (Go)
+
+- [ ] Android
+- [ ] iOS
+- [ ] Web
+- [ ] Desktop
 
 **Platform OS version**
 What version did it happen?

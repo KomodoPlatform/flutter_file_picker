@@ -1,0 +1,132 @@
+name: Publish to pub.dev
+
+# pub.dev's Automated Publishing (OIDC-based, no stored credentials) only
+# accepts publish requests from a GitHub Actions run that was triggered by a
+# `push` of a git tag matching that package's configured tag pattern. It
+# rejects any run triggered by `workflow_dispatch`, with no way to opt out of
+# that restriction: https://dart.dev/go/publishing-from-github
+#
+# So this workflow is split into two jobs:
+#   - `prepare` (workflow_dispatch): figures out which packages have an
+#     unpublished local version and, unless dry_run, tags and pushes each one
+#     individually. It never talks to pub.dev itself.
+#   - `publish` (push of a matching tag): the only event pub.dev will accept.
+#     Publishes the single package named in the tag via OIDC.
+#
+# Each pushed tag triggers its own separate `publish` run. GitHub does not
+# deliver push events for tags when more than three are pushed in the same
+# `git push`, so `prepare` pushes tags one at a time rather than batching
+# them, otherwise some packages would silently never trigger a publish.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (preview only, does not create or push any tags)'
+        type: boolean
+        required: true
+        default: true
+  push:
+    tags:
+      - '*-v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  prepare:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    # Only serializes against other `prepare` runs (which read and write git
+    # tags and unpublished-package state, so two running at once could race).
+    # Deliberately job scoped rather than workflow scoped: `publish` runs
+    # have their own concurrency group below, so a `prepare` run stuck
+    # queued (a rare GitHub Actions scheduling issue, not something this
+    # workflow controls) can no longer silently hold up every tag's publish
+    # behind it, which is what happened before this was split.
+    concurrency:
+      group: publish-pub-dev-prepare
+      cancel-in-progress: false
+    steps:
+      # GitHub does not run other workflows off a push made with the default
+      # GITHUB_TOKEN (it is a deliberate anti-recursion guard), so a tag this
+      # job pushes would silently never trigger the `publish` job below
+      # unless checkout authenticates with a real token instead. RELEASE_PAT
+      # must be a personal access token (classic, `repo` scope, or
+      # fine-grained with "Contents: Read and write" on this repository)
+      # added as a repository secret.
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter precache
+      - uses: bluefireteam/melos-action@v3
+
+      # Always runs, regardless of dry_run, so the job log always shows
+      # exactly which packages and versions are about to be released before
+      # any tag is created. melos only lists packages whose local
+      # pubspec.yaml version is not yet published, every other package in
+      # the workspace is left untouched.
+      - name: Preview packages to be published
+        run: melos publish --dry-run --yes
+
+      # --no-private excludes packages that aren't meant to be published at
+      # all (publish_to: none, e.g. the example app), and --no-published
+      # keeps only the ones whose local version isn't on pub.dev yet, using
+      # melos's own version comparison instead of querying the pub.dev API
+      # ourselves. Tags are pushed one at a time, not batched in a single
+      # `git push --tags`, since GitHub does not deliver push events for
+      # tags when more than three are pushed together.
+      - name: Tag unpublished packages
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          melos list --no-private --no-published --json | jq -c '.[]' | while read -r pkg; do
+            name=$(jq -r '.name' <<< "$pkg")
+            version=$(jq -r '.version' <<< "$pkg")
+            tag="${name}-v${version}"
+            echo "Tagging and pushing $tag"
+            git tag "$tag"
+            git push origin "$tag"
+          done
+
+  publish:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    # Scoped to the triggering tag itself, so each package's publish is
+    # independent of every other package's. This only serializes reruns of
+    # the exact same tag against each other; it never queues one package's
+    # publish behind another's the way a single workflow wide group did.
+    # That is what let a `prepare` run stuck queued cancel six of seven
+    # publish runs when this workflow released every package at once.
+    concurrency:
+      group: publish-pub-dev-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter precache
+
+      # melos-action's own `publish: true` mode is exactly this flow: it
+      # extracts the package name from the triggering tag
+      # (refs/tags/<package>-v<version>), sets up a standalone Dart SDK via
+      # dart-lang/setup-dart for OIDC-based auth (Flutter's bundled Dart does
+      # not support automated publishing), then runs
+      # `melos publish -y --no-dry-run --scope=<package>`.
+      - uses: bluefireteam/melos-action@v3
+        with:
+          publish: true

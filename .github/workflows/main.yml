@@ -5,34 +5,313 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
-
-    name: Run unit tests on ${{ matrix.os }}
-
+  check_changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.filter.outputs.android }}
+      darwin: ${{ steps.filter.outputs.darwin }}
+      linux: ${{ steps.filter.outputs.linux }}
+      windows: ${{ steps.filter.outputs.windows }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
-      - uses: actions/checkout@v2
-
-      - uses: subosito/flutter-action@v1
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
         with:
-          channel: 'stable'
-          flutter-version: '2.x'
+          filters: |
+            shared: &shared
+              - 'packages/file_picker/**'
+              - 'packages/file_picker_platform_interface/**'
+              - 'example/**'
+              - 'pubspec.yaml'
+              - '.github/workflows/**'
+            android:
+              - *shared
+              - 'packages/file_picker_android/**'
+            darwin:
+              - *shared
+              - 'packages/file_picker_darwin/**'
+            linux:
+              - *shared
+              - 'packages/file_picker_linux/**'
+            windows:
+              - *shared
+              - 'packages/file_picker_windows/**'
+            web:
+              - *shared
+              - 'packages/file_picker_web/**'
 
-      - name: Install dependencies
-        run: flutter pub get
+  setup_flutter_versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      flutter-versions: ${{ steps.id_flutter_versions.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dart-lang/setup-dart@v1
+      - name: Fetch Flutter versions
+        id: id_flutter_versions
+        run: dart tool/fetch_versions.dart >> $GITHUB_OUTPUT
 
-      # Uncomment this step to verify the use of 'dart format' on each commit.
+  test_flutter_versions:
+    needs: setup_flutter_versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        flutter: ${{ fromJson(needs.setup_flutter_versions.outputs.flutter-versions) }}
+    name: Tests on Flutter ${{ matrix.flutter }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        if: matrix.flutter == 'stable' || matrix.flutter == 'beta'
+        with:
+          channel: ${{ matrix.flutter }}
+          cache: true
+
+      - uses: subosito/flutter-action@v2
+        if: matrix.flutter != 'stable' && matrix.flutter != 'beta'
+        with:
+          flutter-version: ${{ matrix.flutter }}
+          cache: true
+
+      - run: flutter --version
+      - run: flutter precache
+
+      - uses: bluefireteam/melos-action@v3
+
       - name: Verify formatting
+        if: matrix.flutter == 'stable'
         run: dart format --output=none --set-exit-if-changed .
 
-      # Consider passing '--fatal-infos' for slightly stricter analysis.
       - name: Analyze project source
-        run: dart analyze
+        run: melos exec --concurrency=1 -- flutter analyze .
 
       - name: Run tests
-        run: flutter test
+        run: melos run test
+
+      # tool/ is not a melos package, so `melos run test` never reaches it.
+      - name: Run CI tooling tests
+        if: matrix.flutter == 'stable'
+        run: flutter test tool/test
+
+      # Catches the facade allowing a platform implementation that predates
+      # the platform interface it requires: every constraint is individually
+      # satisfied, but the combination does not compile. See
+      # https://github.com/vicajilau/flutter_file_picker/issues/2186
+      #
+      # A standalone app (outside this workspace, so implementations resolve
+      # from pub.dev instead of the local path) depends on the facade, then
+      # `pub downgrade` forces every dependency to the lowest version its
+      # constraint allows, exactly what an external app's lockfile could
+      # legitimately resolve to. `analyze` does not catch this: a plugin's
+      # platform-specific implementation is only pulled into the type-checked
+      # graph via the generated plugin registrant, which only a real build
+      # produces. `build web` was picked because it needs no extra SDK setup
+      # and, since dart2js compiles the whole plugin registrant regardless of
+      # which platform each implementation targets, it reliably catches this
+      # on every platform's implementation, not just web's.
+      - name: Check facade constraints against a downgraded resolution
+        if: matrix.flutter == 'stable'
+        run: |
+          set -euo pipefail
+          app="$(mktemp -d)/facade_constraints_smoke_test"
+          flutter create --platforms=web --org com.example "$app"
+          cd "$app"
+          flutter pub add "file_picker:{\"path\":\"$GITHUB_WORKSPACE/packages/file_picker\"}"
+          echo "import 'package:file_picker/file_picker.dart';" > lib/main.dart
+          echo "void main() => FilePicker.pickFiles();" >> lib/main.dart
+          flutter pub downgrade
+          flutter build web
+
+  build_android:
+    needs: [check_changes, test_flutter_versions]
+    if: ${{ needs.check_changes.outputs.android == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Last release of the AGP 8.x line. Flutter enforces a minimum AGP
+          # version and raises it over time, so pinning near the top of the
+          # line keeps this lane alive until Flutter drops AGP 8 altogether.
+          - lane: agp-8.x
+            agp_version: 8.13.2
+            gradle_version: 8.14.3
+            kotlin_version: 2.2.20
+            built_in_kotlin: ""
+          - lane: agp-9.x
+            agp_version: 9.2.1
+            gradle_version: 9.5.0
+            kotlin_version: 2.3.21
+            built_in_kotlin: "false"
+    name: Build Android (example app, ${{ matrix.lane }})
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show toolchain versions
+        run: |
+          flutter --version
+          java -version
+
+      # See tool/patch_android_example.dart to reproduce a failing lane locally.
+      - name: Patch example host app for ${{ matrix.lane }}
+        run: >
+          dart tool/patch_android_example.dart
+          --agp ${{ matrix.agp_version }}
+          --gradle ${{ matrix.gradle_version }}
+          --kotlin ${{ matrix.kotlin_version }}
+          --built-in-kotlin "${{ matrix.built_in_kotlin }}"
+
+      - name: Show Android diff under test
+        run: git --no-pager diff -- example/android | cat
+
+      # Restored after the patch step on purpose: the key has to reflect the
+      # toolchain the lane actually builds with, not the committed one.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ matrix.lane }}-${{ matrix.gradle_version }}-${{ hashFiles('packages/file_picker_android/android/**/*.gradle*', 'example/android/**/*.gradle*') }}
+          restore-keys: |
+            gradle-${{ matrix.lane }}-${{ matrix.gradle_version }}-
+
+      - name: Build Android example
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build apk --debug
+
+      # R8 only runs on release builds, so this is the only job that exercises
+      # packages/file_picker_android/android/proguard-rules.pro. The example
+      # signs release with the debug keys, so no secrets are involved.
+      - name: Build Android example (release, exercises R8)
+        if: matrix.lane == 'agp-9.x'
+        working-directory: example
+        run: flutter build apk --release
+
+  build_linux:
+    needs: [check_changes, test_flutter_versions]
+    if: ${{ needs.check_changes.outputs.linux == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: Build Linux (example app)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libc++-dev libc++abi-dev
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+      - name: Build Linux example
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build linux
+
+  build_windows:
+    needs: [check_changes, test_flutter_versions]
+    if: ${{ needs.check_changes.outputs.windows == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    name: Build Windows (example app)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+      - name: Build Windows example
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build windows
+
+  build_darwin:
+    needs: [check_changes, test_flutter_versions]
+    if: ${{ needs.check_changes.outputs.darwin == 'true' }}
+    runs-on: macos-latest
+    timeout-minutes: 40
+    name: Build Darwin (macOS + iOS example app)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+      - name: Build macOS example
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build macos
+
+      # file_picker_darwin declares ios and macos with sharedDarwinSource, so
+      # both targets ship from the same sources and both need compiling. Reuses
+      # this runner because macOS minutes bill at 10x.
+      - name: Build iOS example
+        working-directory: example
+        run: flutter build ios --no-codesign
+
+  build_web:
+    needs: [check_changes, test_flutter_versions]
+    if: ${{ needs.check_changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    name: Build Web (example app)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - name: Enable Web
+        run: flutter config --enable-web
+      # Both backends: JS interop does not behave identically under dart2wasm
+      # and dart2js, and dart2js is still what most apps ship.
+      - name: Build Web example (dart2wasm)
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build web --wasm
+
+      - name: Build Web example (dart2js)
+        working-directory: example
+        run: flutter build web

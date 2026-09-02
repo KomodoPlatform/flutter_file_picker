@@ -1,15 +1,13 @@
 include: package:lints/recommended.yaml
 
 analyzer:
+  errors:
+    deprecated_member_use_from_same_package: ignore
   exclude:
     - build/**
-    - example/**
-    - lib/generated_plugin_registrant.dart
-#   language:
-#     strict-raw-types: true
-#   strong-mode:
-#     implicit-casts: false
-
-# linter:
-#   rules:
-#     - cancel_subscriptions
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

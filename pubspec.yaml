@@ -1,44 +1,37 @@
-name: file_picker
-description: A package that allows you to use a native file explorer to pick single or multiple absolute file paths, with extension filtering support.
-homepage: https://github.com/miguelpruivo/plugins_flutter_file_picker
-repository: https://github.com/miguelpruivo/flutter_file_picker
-issue_tracker: https://github.com/miguelpruivo/flutter_file_picker/issues
-version: 4.1.6
+name: flutter_file_picker_workspace
+description: Root workspace definition for flutter_file_picker repository.
+publish_to: none
 
-dependencies:
-  flutter:
-    sdk: flutter
-  flutter_web_plugins:
-    sdk: flutter
-    
-  flutter_plugin_android_lifecycle: ^2.0.2
-  plugin_platform_interface: ^2.0.0
-  ffi: ^1.1.2
-  path: ^1.8.0
+workspace:
+  - packages/file_picker
+  - packages/file_picker_platform_interface
+  - packages/file_picker_android
+  - packages/file_picker_darwin
+  - packages/file_picker_linux
+  - packages/file_picker_windows
+  - packages/file_picker_web
+  - example
 
-dev_dependencies:
-  lints: ^1.0.1
-  flutter_test:
-    sdk: flutter
+melos:
+  packages:
+    - packages/*
+    - example
+  scripts:
+    analyze:
+      exec: flutter analyze .
+      description: Run flutter analyze in all packages.
+
+    test:
+      exec: flutter test
+      concurrency: 1
+      description: Run flutter test in all packages.
 
 environment:
-  sdk: ">=2.12.0 <3.0.0"
-  flutter: ">=1.10.0"
-  
-flutter:
-  plugin:
-    platforms:
-      android:
-        package: com.mr.flutter.plugin.filepicker
-        pluginClass: FilePickerPlugin
-      ios:
-        pluginClass: FilePickerPlugin
-      web:
-        pluginClass: FilePickerWeb
-        fileName: _internal/file_picker_web.dart
-      macos:
-        default_package: file_picker
-      windows:
-        default_package: file_picker
-      linux:
-        default_package: file_picker
+  sdk: ">=3.10.0 <4.0.0"
+  flutter: ">=3.38.0"
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+  melos: ^8.2.2
